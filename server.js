@@ -18,7 +18,10 @@ io.on('connection', (socket) => {
     // Afficher les sockets connectés à la salle
     const socketsInRoom = io.sockets.adapter.rooms.get(code);
     console.log(`Sockets connectés à la salle ${code}:`, socketsInRoom);
+    
   });
+
+  
 });
 
 server.listen(port, '0.0.0.0', () => {

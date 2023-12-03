@@ -23,12 +23,13 @@ const generateUniqueCode = () => {
 exports.createGame = (req, res, next) => {
   
     const generatedCode = generateUniqueCode();
+    
     const game = new Game({
       code: generatedCode,
-      status: req.body.status,
+      status: 'wait',
       hostId: req.body.hostId,
     });
-    game.listPlayer.push({userId:req.body.hostId, surname: req.body.surname});
+    //game.listPlayer.push({userId:req.body.hostId, surname: req.body.surname});
     game.save().then(
       (savedGame) => {
         res.json({ success: true, code: savedGame.code });
@@ -71,28 +72,30 @@ exports.addPlayer = (req, res, next) => {
     });
   }
 
-   Game.findOne({
+  Game.findOne({
     code: req.params.code
   })
     .then((game) => {
+      if (!game) {
+        // Si le jeu n'est pas trouvé, renvoyez une réponse appropriée
+        return res.status(404).json({
+          error: 'Game not found.',
+        });
+      }
+
       const newPlayer = { userId: req.body.userId, surname: req.body.surname };
-      
       // Ajouter le joueur à la liste
       game.listPlayer.push(newPlayer);
-      
-      
-
       // Enregistrez la mise à jour dans la base de données
       return game.save();
     })
     .then((game) => {
-      console.log(game.listPlayer);
-      io.to(game.code).emit("sendListPlayer", game.listPlayer);
-      
-      
-     
-      // Ne renvoie la réponse que si tout s'est bien passé
-      res.json({ success: true });
+      if (game) {
+        console.log(game.listPlayer);
+        io.to(game.code).emit("sendListPlayer", game.listPlayer);
+        // Ne renvoie la réponse que si tout s'est bien passé
+        res.json({ success: true });
+      }
     })
     .catch((error) => {
       console.error('Error:', error);
