@@ -64,7 +64,6 @@ exports.createGame = (req, res, next) => {
 };
 
 exports.addPlayer = (req, res, next) => {
-  console.log('code: ');
 
   if (!req.params.code || !req.body.userId) {
     return res.status(400).json({
@@ -76,9 +75,10 @@ exports.addPlayer = (req, res, next) => {
     code: req.params.code
   })
     .then((game) => {
+      console.log(game);
       if (!game) {
-        // Si le jeu n'est pas trouvé, renvoyez une réponse appropriée
-        return res.status(404).json({
+        console.log('Pas de game')
+;        return res.status(404).json({
           error: 'Game not found.',
         });
       }
@@ -87,13 +87,57 @@ exports.addPlayer = (req, res, next) => {
       // Ajouter le joueur à la liste
       game.listPlayer.push(newPlayer);
       // Enregistrez la mise à jour dans la base de données
+       game.save().then(() => {
+      
+        if(game){
+          io.to(game.code).emit("sendListPlayer", game.listPlayer);
+          // Ne renvoie la réponse que si tout s'est bien passé
+          res.json({ success: true });
+
+        }
+        
+      
+    })
+  })
+    .catch((error) => {
+      console.log("Erreur");
+      console.error('Error:', error);
+      // Gérez l'erreur sans renvoyer une réponse réussie ici
+      res.status(500).json({
+        error: error.message,
+      });
+    });
+};
+
+exports.removePlayer = (req, res, next) => {
+  // Vérifiez si les paramètres requis sont présents dans la requête
+  if (!req.params.code || !req.body.userId) {
+    return res.status(400).json({
+      error: 'Code and userId are required in the request.',
+    });
+  }
+
+  // Recherchez le jeu par code
+  Game.findOne({ code: req.params.code })
+    .then((game) => {
+      if (!game) {
+        // Si le jeu n'est pas trouvé, renvoyez une réponse appropriée
+        return res.status(404).json({
+          error: 'Game not found.',
+        });
+      }
+
+      // Filtrer la liste des joueurs pour supprimer celui avec le userId spécifié
+      game.listPlayer = game.listPlayer.filter(player => player.userId !== req.body.userId);
+
+      // Enregistrez la mise à jour dans la base de données
       return game.save();
     })
     .then((game) => {
       if (game) {
-        console.log(game.listPlayer);
+        // Émettez l'événement pour mettre à jour la liste des joueurs
         io.to(game.code).emit("sendListPlayer", game.listPlayer);
-        // Ne renvoie la réponse que si tout s'est bien passé
+        // Renvoie la réponse uniquement si tout s'est bien passé
         res.json({ success: true });
       }
     })

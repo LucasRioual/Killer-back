@@ -43,27 +43,21 @@ exports.createUser = (req, res, next) => {
 };
 
 exports.updateUserSurname = async (req, res) => {
-   
-  
-    try {
-      // Recherchez l'utilisateur dans la base de données par ID
-      const user = await User.findById(req.params.id);
-  
-      // Vérifiez si l'utilisateur existe
-      if (!user) {
-        return res.status(404).json({ error: 'Utilisateur non trouvé' });
-      }
-  
-     
-      user.surname = req.body.surname;
-  
-      // Enregistrez les modifications dans la base de données
-      await user.save();
-  
-      // Répondez avec les détails mis à jour de l'utilisateur
-      res.json({ success: true, user });
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du surnom :', error);
-      res.status(500).json({ error: 'Erreur serveur' });
+  try {
+    const user = await User.findOne({ _id: req.params.id });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
     }
-  };
+
+    user.surname = req.body.surname;
+    await user.save();
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating user surname:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+  
+    
