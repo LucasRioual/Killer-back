@@ -82,6 +82,13 @@ exports.addPlayer = (req, res, next) => {
           error: 'Game not found.',
         });
       }
+      // vérifier que le surnom n'est pas déjà utilisé
+      console.log('test', game.listPlayer.find(player => player.surname === req.body.surname));
+      if(game.listPlayer.find(player => player.surname === req.body.surname)){
+        return res.status(400).json({
+          error: 'This nickname is already used.',
+        });
+      }
 
       const newPlayer = { userId: req.body.userId, surname: req.body.surname };
       // Ajouter le joueur à la liste
@@ -149,3 +156,39 @@ exports.removePlayer = (req, res, next) => {
       });
     });
 };
+
+exports.startGame = (req, res, next) => {
+  console.log("startGame");
+  Game.findOne({ code: req.params.code })
+    .then((game) => {
+      if (!game) {
+        // Si le jeu n'est pas trouvé, renvoyez une réponse appropriée
+        return res.status(404).json({
+          error: 'Game not found.',
+        });
+      }
+      const listPlayer = game.listPlayer;
+      for (let i=0 ; i<listPlayer.length-1 ; i++){
+        listPlayer[i].target = listPlayer[i+1].surname;
+      }
+      listPlayer[listPlayer.length-1].target = listPlayer[0].surname;
+      game.save().then(() => {
+        if(game){
+          console.log(game.listPlayer);
+          io.to(game.code).emit("sendTarget", game.listPlayer);
+          // Ne renvoie la réponse que si tout s'est bien passé
+          res.json({ success: true });
+
+        }
+      });
+    })
+    .catch((error) => {
+      console.log("Erreur");
+      console.error('Error:', error);
+      // Gérez l'erreur sans renvoyer une réponse réussie ici
+      res.status(500).json({
+        error: error.message,
+      });
+    });
+
+}

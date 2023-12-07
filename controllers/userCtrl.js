@@ -11,7 +11,8 @@ exports.createUser = (req, res, next) => {
     });
     user.save().then(
       (savedUser) => {
-        res.json({ success: true, id: savedUser._id });
+        console.log("Id de l'utilisateur créee : ", savedUser._id);
+        res.json({ success: true, userId: savedUser._id });
         
       }
     ).catch(
