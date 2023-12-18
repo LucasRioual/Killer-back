@@ -1,4 +1,6 @@
+const { get } = require('mongoose');
 const Game = require('../models/gameModel.js');
+const Mission = require('../models/missionModel.js');
 let io; // Assurez-vous que io est accessible dans tout le module
 
 exports.initializeIo = (socketIoInstance) => {
@@ -9,7 +11,7 @@ exports.initializeIo = (socketIoInstance) => {
 
 
 const generateUniqueCode = () => {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const characters = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789';
   let code = '';
   for (let i = 0; i < 6; i++) {
     const randomIndex = Math.floor(Math.random() * characters.length);
@@ -44,9 +46,7 @@ exports.createGame = (req, res, next) => {
     );
   };
 
-  //Initialisation de la connexion socket
-  //socket.join(code)
-  //io.to(code).emit("sendListPlayer", listPlayer);
+
   exports.getPlayers = (req, res, next) => {
   Game.findOne({
     code: req.params.code
@@ -57,7 +57,7 @@ exports.createGame = (req, res, next) => {
   ).catch(
     (error) => {
       res.status(404).json({
-        error: error
+        error: 'La partie n\'existe pas.'
       });
     }
   );
@@ -77,19 +77,16 @@ exports.addPlayer = (req, res, next) => {
     .then((game) => {
       console.log(game);
       if (!game) {
-        console.log('Pas de game')
-;        return res.status(404).json({
+        console.log('Pas de game');
+        return res.status(404).json({
           error: 'Game not found.',
         });
       }
-      // vérifier que le surnom n'est pas déjà utilisé
-      console.log('test', game.listPlayer.find(player => player.surname === req.body.surname));
       if(game.listPlayer.find(player => player.surname === req.body.surname)){
         return res.status(400).json({
           error: 'This nickname is already used.',
         });
       }
-
       const newPlayer = { userId: req.body.userId, surname: req.body.surname };
       // Ajouter le joueur à la liste
       game.listPlayer.push(newPlayer);
@@ -117,15 +114,12 @@ exports.addPlayer = (req, res, next) => {
 };
 
 exports.removePlayer = (req, res, next) => {
-  // Vérifiez si les paramètres requis sont présents dans la requête
-  if (!req.params.code || !req.body.userId) {
-    return res.status(400).json({
-      error: 'Code and userId are required in the request.',
-    });
-  }
-
-  // Recherchez le jeu par code
-  Game.findOne({ code: req.params.code })
+  
+  Game.findOneAndUpdate(
+    { code: req.params.code },
+    { $pull: { listPlayer: { userId: req.params.userId } } },
+    { new: true } // Pour renvoyer le document mis à jour
+  )
     .then((game) => {
       if (!game) {
         // Si le jeu n'est pas trouvé, renvoyez une réponse appropriée
@@ -133,20 +127,10 @@ exports.removePlayer = (req, res, next) => {
           error: 'Game not found.',
         });
       }
-
-      // Filtrer la liste des joueurs pour supprimer celui avec le userId spécifié
-      game.listPlayer = game.listPlayer.filter(player => player.userId !== req.body.userId);
-
-      // Enregistrez la mise à jour dans la base de données
-      return game.save();
-    })
-    .then((game) => {
-      if (game) {
-        // Émettez l'événement pour mettre à jour la liste des joueurs
-        io.to(game.code).emit("sendListPlayer", game.listPlayer);
-        // Renvoie la réponse uniquement si tout s'est bien passé
-        res.json({ success: true });
-      }
+      // Émettez l'événement pour mettre à jour la liste des joueurs
+      io.to(game.code).emit('sendListPlayer', game.listPlayer);
+      // Renvoie la réponse uniquement si tout s'est bien passé
+      res.json({ success: true });
     })
     .catch((error) => {
       console.error('Error:', error);
@@ -157,38 +141,47 @@ exports.removePlayer = (req, res, next) => {
     });
 };
 
-exports.startGame = (req, res, next) => {
-  console.log("startGame");
-  Game.findOne({ code: req.params.code })
-    .then((game) => {
-      if (!game) {
-        // Si le jeu n'est pas trouvé, renvoyez une réponse appropriée
-        return res.status(404).json({
-          error: 'Game not found.',
-        });
-      }
-      const listPlayer = game.listPlayer;
-      for (let i=0 ; i<listPlayer.length-1 ; i++){
-        listPlayer[i].target = listPlayer[i+1].surname;
-      }
-      listPlayer[listPlayer.length-1].target = listPlayer[0].surname;
-      game.save().then(() => {
-        if(game){
-          console.log(game.listPlayer);
-          io.to(game.code).emit("sendTarget", game.listPlayer);
-          // Ne renvoie la réponse que si tout s'est bien passé
-          res.json({ success: true });
 
-        }
+const getMission =  async () => {
+  
+  const documents = await Mission.aggregate([{ $sample: { size: 1 } }]); 
+  const mission = documents[0]; 
+  console.log(mission.message);
+  return mission.message;
+ 
+  
+};
+  
+
+exports.startGame = async (req, res, next) => {
+  console.log('startGame');
+  try {
+    const game = await Game.findOne({ code: req.params.code });
+
+    if (!game) {
+      return res.status(404).json({
+        error: 'Game not found.',
       });
-    })
-    .catch((error) => {
-      console.log("Erreur");
-      console.error('Error:', error);
-      // Gérez l'erreur sans renvoyer une réponse réussie ici
-      res.status(500).json({
-        error: error.message,
-      });
+    }
+
+    const listPlayer = game.listPlayer;
+
+    // Utilisez Promise.all pour paralléliser les appels à getMission
+    await Promise.all(listPlayer.map(async (player, index) => {
+      player.target = index < listPlayer.length - 1 ? listPlayer[index + 1].surname : listPlayer[0].surname;
+      player.mission = await getMission();
+    }));
+
+    await game.save();
+
+    console.log('Nouvelle liste', game.listPlayer);
+    io.to(game.code).emit('sendTarget', game.listPlayer);
+    res.json({ success: true });
+  } catch (error) {
+    console.log('Erreur');
+    console.error('Error:', error);
+    res.status(500).json({
+      error: error.message,
     });
-
-}
+  }
+};

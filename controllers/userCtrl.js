@@ -1,10 +1,25 @@
 const User = require('../models/userModel.js');
+const Mission = require('../models/missionModel.js');
 
 
-
-
+/* const addMission = () => {
+  const mission = new Mission({
+    message: "Tu dois tuer la personne qui t'a été assignée",
+  });
+  mission.save().then(
+    (savedMission) => {
+      console.log("Id de la mission créee : ", savedMission._id);
+      return savedMission._id;
+    }
+  ).catch(
+    (error) => {
+      console.log(error);
+    }
+  );
+} */
 
 exports.createUser = (req, res, next) => {
+    
 
     const user = new User({
       surname: req.body.surname,
@@ -43,22 +58,26 @@ exports.createUser = (req, res, next) => {
   );
 };
 
-exports.updateUserSurname = async (req, res) => {
-  try {
-    const user = await User.findOne({ _id: req.params.id });
+exports.updateUserSurname = (req, res) => {
+  const userId = req.params.id;
+  const newSurname = req.body.surname;
+  console.log('New surname:', newSurname);
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
+  User.findByIdAndUpdate(userId, { $set: { surname: newSurname } }, { new: true })
+    .then((user) => {
+      if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+      console.log('User surname updated:', user);
 
-    user.surname = req.body.surname;
-    await user.save();
-
-    return res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating user surname:', error);
-    return res.status(500).json({ error: error.message });
-  }
+      res.json({ success: true, user });
+    })
+    .catch((error) => {
+      console.error('Error updating user surname:', error);
+      res.status(500).json({ error: error.message });
+    });
 };
+  
+  
   
     
