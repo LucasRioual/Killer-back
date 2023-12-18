@@ -175,7 +175,7 @@ exports.startGame = async (req, res, next) => {
     await game.save();
 
     console.log('Nouvelle liste', game.listPlayer);
-    io.to(game.code).emit('sendTarget', game.listPlayer);
+    io.to(game.code).emit('startGame', game.listPlayer);
     res.json({ success: true });
   } catch (error) {
     console.log('Erreur');

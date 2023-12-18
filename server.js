@@ -25,7 +25,7 @@ io.on('connection', (socket) => {
       code: data.code
     })
       .then((game) => {
-        const newPlayer = { userId: data.userId, surname: data.surname };
+        const newPlayer = { userId: data.userId, surname: data.surname, socketId: socket.id };
         game.listPlayer.push(newPlayer);
         game.save().then(() => {
           if(game){
@@ -67,6 +67,22 @@ io.on('connection', (socket) => {
           console.error('Error:', error);
         });
       });
+
+    socket.on('startGame', () => {
+      Game.findOneAndDelete({ code: code })
+        .then(() => {
+          io.to(code).emit('endGame');
+        })
+        .catch((error) => {
+          console.error('Error:', error);
+        });
+      });
+
+    socket.on('confirmKill', (socketTarget, userSurname) => {
+
+      socket.to(socketTarget).emit('sendConfirmKill',userSurname);
+    });
+      
 
 
 
