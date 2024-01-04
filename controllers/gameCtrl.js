@@ -63,7 +63,7 @@ exports.createGame = (req, res, next) => {
   );
 };
 
-exports.addPlayer = (req, res, next) => {
+/* exports.addPlayer = (req, res, next) => {
 
   if (!req.params.code || !req.body.userId) {
     return res.status(400).json({
@@ -139,7 +139,7 @@ exports.removePlayer = (req, res, next) => {
         error: error.message,
       });
     });
-};
+}; */
 
 
 const getMission =  async () => {

@@ -68,20 +68,30 @@ io.on('connection', (socket) => {
         });
       });
 
-    socket.on('startGame', () => {
-      Game.findOneAndDelete({ code: code })
-        .then(() => {
-          io.to(code).emit('endGame');
-        })
-        .catch((error) => {
-          console.error('Error:', error);
-        });
-      });
+
 
     socket.on('confirmKill', (socketTarget, userSurname) => {
-
       socket.to(socketTarget).emit('sendConfirmKill',userSurname);
+      //Envoyer une notification
     });
+
+    socket.on('killed', (gameCode, socketKiller, target, mission) => {
+      console.log('killed', socketKiller, gameCode, target, mission)
+      Game.findOne(
+        { code: gameCode }
+        ).then((game) => {
+          const listPlayer = game.listPlayer;
+
+          const index = listPlayer.findIndex((player) => player.socketId === socketKiller);
+          listPlayer[index].target = target;
+          listPlayer[index].mission = mission;
+          game.save().then(() => {
+            if(game){
+              socket.to(socketKiller).emit("sendListPlayer", game.listPlayer);
+            }
+        })
+    });
+  });
       
 
 
