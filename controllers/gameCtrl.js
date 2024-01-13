@@ -29,7 +29,7 @@ exports.createGame = (req, res, next) => {
     const game = new Game({
       code: generatedCode,
       status: 'wait',
-      hostId: req.body.hostId,
+      hostSurname: req.body.surname,
     });
     //game.listPlayer.push({userId:req.body.hostId, surname: req.body.surname});
     game.save().then(
@@ -45,7 +45,6 @@ exports.createGame = (req, res, next) => {
       }
     );
   };
-
 
   exports.getPlayers = (req, res, next) => {
   Game.findOne({

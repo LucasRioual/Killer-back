@@ -22,14 +22,20 @@ io.on('connection', (socket) => {
     console.log('startSocket', data);
     socket.join(data.code); 
     console.log(data.expoToken);
-    const socketsInRoom = io.sockets.adapter.rooms.get(data.code);
-    console.log(`Sockets connectés à la salle ${data.code}:`, socketsInRoom);
     Game.findOne({
       code: data.code
     })
       .then((game) => {
-        const newPlayer = { userId: data.userId, surname: data.surname, socketId: socket.id, expoToken: data.expoToken };
+
+        const existingPlayer = game.listPlayer.find(player => player.surname === data.surname);
+        if(existingPlayer){
+          existingPlayer.socketId = socket.id;
+        }
+        else{
+          const newPlayer = {surname: data.surname, socketId: socket.id, expoToken: data.expoToken };
         game.listPlayer.push(newPlayer);
+
+        }
         game.save().then(() => {
           if(game){
             io.to(data.code).emit("sendListPlayer", game.listPlayer);
@@ -38,10 +44,44 @@ io.on('connection', (socket) => {
     })
   });
 
+  socket.on('leaveGame', (code, surname) => {
+    console.log('leaveGame', code, surname);
+    Game.findOne({
+      code: code
+    })
+    .then((game) => {
+      // Recherche du joueur qui a le surname fourni
+      const murderPlayer = game.listPlayer.find(player => player.target === surname);
+      const playerToLeave = game.listPlayer.find(player => player.surname === surname);
+      console.log(murderPlayer, playerToLeave);
+  
+      
+        
+        murderPlayer.target = playerToLeave.target;
+        murderPlayer.mission = playerToLeave.mission;
+  
+        // Supprimer le joueur qui part de la liste des joueurs
+        game.listPlayer = game.listPlayer.filter(player => player.surname !== surname);
+  
+        // Enregistrez les modifications dans la base de données
+        game.save().then(() => {
+          console.log(game.listPlayer)
+          // Émettre un événement pour informer les clients des mises à jour
+          io.to(code).emit("sendListPlayer", game.listPlayer);
+        });
+      
+    })
+    .catch((error) => {
+      console.error('Erreur lors du traitement de leaveGame:', error);
+    });
+  });
+  
+  
+
   socket.on('removePlayer', (data) => {
     Game.findOneAndUpdate(
       { code: data.code },
-      { $pull: { listPlayer: { userId: data.userId } } },
+      { $pull: { listPlayer: { surname: data.surname } } },
       { new: true } // Pour renvoyer le document mis à jour
     )
       .then((game) => {
