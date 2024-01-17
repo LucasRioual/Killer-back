@@ -25,6 +25,7 @@ const generateUniqueCode = () => {
 exports.createGame = (req, res, next) => {
   
     const generatedCode = generateUniqueCode();
+    console.log("Création d'une partie");
     
     const game = new Game({
       code: generatedCode,
