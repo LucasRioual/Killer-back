@@ -1,4 +1,4 @@
-const { get } = require('mongoose');
+
 const Game = require('../models/gameModel.js');
 const Mission = require('../models/missionModel.js');
 let io; // Assurez-vous que io est accessible dans tout le module
@@ -29,7 +29,7 @@ exports.createGame = (req, res, next) => {
     
     const game = new Game({
       code: generatedCode,
-      status: 'wait',
+      statut: 'wait',
       hostSurname: req.body.surname,
     });
     //game.listPlayer.push({userId:req.body.hostId, surname: req.body.surname});
@@ -52,7 +52,7 @@ exports.createGame = (req, res, next) => {
     code: req.params.code
   }).then(
     (game) => {
-      res.json({ success: true, listPlayer: game.listPlayer });
+      res.json({ success: true, listPlayer: game.listPlayer, statut: game.statut });
     }
   ).catch(
     (error) => {
@@ -163,6 +163,8 @@ exports.startGame = async (req, res, next) => {
         error: 'Game not found.',
       });
     }
+
+    game.statut = 'start';
 
     const listPlayer = game.listPlayer;
 
