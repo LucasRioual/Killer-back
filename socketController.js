@@ -183,16 +183,20 @@ const initializeSocket = (server) => {
         });
       });
 
-    socket.on('confirmKill', (socketTarget, userSurname, expoTokenTarget, gameCode) => {
-      socket.to(socketTarget).emit('sendConfirmKill',userSurname);
-      sendPushNotification(expoTokenTarget, 'Es-tu mort ?', `Confirme ta mort pour que ton assassin puisse continuer à jouer !`);
+    socket.on('confirmKill', (gameCode) => {
+      
       //Mettre à jour le statut de la target
         Game.findOne(
             { code: gameCode }
             ).then((game) => {
-            const listPlayer = game.listPlayer;
-            const index = listPlayer.findIndex((player) => player.socketId === socketTarget);
-            listPlayer[index].statut = 'confirm';
+              const listPlayer = game.listPlayer;
+              console.log(listPlayer);
+              console.log(socket.id);
+              const killerPlayer = listPlayer.find((player) => player.socketId === socket.id);
+              const targetPlayer = listPlayer.find((player) => player.surname === killerPlayer.target);
+              io.to(targetPlayer.socketId).emit('sendConfirmKill',killerPlayer.surname);
+              sendPushNotification(targetPlayer.expoToken, 'Es-tu mort ?', `Confirme ta mort pour que ton assassin puisse continuer à jouer !`);
+              targetPlayer.statut = 'confirm';
             game.save().then(() => {
                 console.log('statut du joueur mis à jour',game.listPlayer);
             }
@@ -200,34 +204,35 @@ const initializeSocket = (server) => {
         });
     });
 
-    socket.on('killed', (gameCode, socketKiller, target, mission) => { //le kill est confirmé
-      console.log('killed', socketKiller, gameCode, target, mission)
+    socket.on('killed', (gameCode) => { //le kill est confirmé
       Game.findOne(
         { code: gameCode }
         ).then((game) => {
           const listPlayer = game.listPlayer;
-          const indexKiller = listPlayer.findIndex((player) => player.socketId === socketKiller);
-          const indexTarget = listPlayer.findIndex((player) => player.socketId === socket.id);
-          listPlayer[indexKiller].target = listPlayer[indexTarget].target;
-          listPlayer[indexKiller].mission = listPlayer[indexTarget].mission;
-          listPlayer[indexTarget].statut = 'dead';
+          const target = listPlayer.find((player) => player.socketId === socket.id);
+          const killer = listPlayer.find((player) => player.target === target.surname);
+          killer.target = target.target;
+          killer.mission = target.mission;
+          target.statut = 'dead';
           game.save().then(() => {
             if(game){
-              socket.to(socketKiller).emit("isKilledConfirm", game.listPlayer);
+              socket.to(killer.socketId).emit("isKilledConfirm", game.listPlayer);
             }
         })
     });
   });
 
-  socket.on('notKilled', (socketKiller, gameCode) => { //le kill n'est pas confirmé')
-    socket.to(socketKiller).emit('isNotKilledConfirm');
+  socket.on('notKilled', (gameCode) => { //le kill n'est pas confirmé')
+    
     // Modifier le statut du joueur 
     Game.findOne(
       { code: gameCode }
       ).then((game) => {
       const listPlayer = game.listPlayer;
-      const index = listPlayer.findIndex((player) => player.socketId === socket.id);
-      listPlayer[index].statut = 'alive';
+      const target = listPlayer.find((player) => player.socketId === socket.id);
+      const killer = listPlayer.find((player) => player.target === target.surname);
+      socket.to(killer.socketId).emit('isNotKilledConfirm');
+      target.statut = 'alive';
       game.save().then(() => {
           console.log('statut du joueur mis à jour',game.listPlayer);
       });
