@@ -72,7 +72,8 @@ const initializeSocket = (server) => {
 
         }
         game.save().then(() => {  
-            io.to(data.code).emit("sendListPlayer", game.listPlayer);
+            
+            io.to(data.code).emit("sendListPlayer", game.listPlayer.map(player => player.surname));
             
       })
     })
@@ -100,8 +101,8 @@ const initializeSocket = (server) => {
       game.listPlayer.push(newPlayer);
       game.listNewPlayer = game.listNewPlayer.filter(player => player !== newPlayer);
       await game.save();
-      io.to(gameCode).emit("sendListPlayer", game.listPlayer);
-      io.to(newPlayer.socketId).emit('startGame', game.listPlayer);
+      io.to(game.listPlayer[randomIndex].socketId).emit("sendTargetAndMission", game.listPlayer[randomIndex].target, game.listPlayer[randomIndex].mission);
+      io.to(newPlayer.socketId).emit('startGame', newPlayer.target, newPlayer.mission);
     } catch (error) {
       console.error('Error in confirmNewPlayer:', error);
     }
@@ -126,7 +127,7 @@ const initializeSocket = (server) => {
   });
   
 
-  socket.on('leaveGame', (code, surname) => {
+  /* socket.on('leaveGame', (code, surname) => {
     console.log('leaveGame', code, surname);
     Game.findOne({
       code: code
@@ -147,11 +148,12 @@ const initializeSocket = (server) => {
           io.to(code).emit("sendListPlayer", game.listPlayer);
         });
       
-    })
+    }) 
     .catch((error) => {
       console.error('Erreur lors du traitement de leaveGame:', error);
     });
   });
+  */
   
   
 
@@ -162,15 +164,12 @@ const initializeSocket = (server) => {
       { new: true } // Pour renvoyer le document mis à jour
     )
       .then((game) => {
-  
-        io.to(data.code).emit('sendListPlayer', game.listPlayer);
+        io.to(data.code).emit('sendListPlayer', game.listPlayer.map(player => player.surname));
       })
       .catch((error) => {
         console.error('Error:', error);
       });
       socket.leave(data.code);
-      const socketsInRoom = io.sockets.adapter.rooms.get(data.code);
-      console.log(`Sockets connectés à la salle ${data.code}:`, socketsInRoom);
     });
 
     socket.on('removeGame', (code) => {
@@ -216,7 +215,7 @@ const initializeSocket = (server) => {
           target.statut = 'dead';
           game.save().then(() => {
             if(game){
-              socket.to(killer.socketId).emit("isKilledConfirm", game.listPlayer);
+              socket.to(killer.socketId).emit("isKilledConfirm", killer.target, killer.mission);
             }
         })
     });
@@ -252,7 +251,10 @@ const initializeSocket = (server) => {
     }));
     await game.save();
     console.log('Nouvelle liste', game.listPlayer);
-    io.to(game.code).emit('startGame', game.listPlayer);
+    for (let i = 0; i < game.listPlayer.length; i++) {
+      io.to(game.listPlayer[i].socketId).emit('startGame', game.listPlayer[i].target, game.listPlayer[i].mission);
+    };
+    //io.to(game.code).emit('startGame', game.listPlayer);
   } catch (error) {
     console.log('Erreur');
     console.error('Error:', error);

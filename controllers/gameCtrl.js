@@ -21,7 +21,6 @@ const generateUniqueCode = () => {
 };
 
 
-
 exports.createGame = (req, res, next) => {
   
     const generatedCode = generateUniqueCode();
@@ -63,83 +62,6 @@ exports.createGame = (req, res, next) => {
   );
 };
 
-/* exports.addPlayer = (req, res, next) => {
-
-  if (!req.params.code || !req.body.userId) {
-    return res.status(400).json({
-      error: 'Code and userId are required in the request.',
-    });
-  }
-
-  Game.findOne({
-    code: req.params.code
-  })
-    .then((game) => {
-      console.log(game);
-      if (!game) {
-        console.log('Pas de game');
-        return res.status(404).json({
-          error: 'Game not found.',
-        });
-      }
-      if(game.listPlayer.find(player => player.surname === req.body.surname)){
-        return res.status(400).json({
-          error: 'This nickname is already used.',
-        });
-      }
-      const newPlayer = { userId: req.body.userId, surname: req.body.surname };
-      // Ajouter le joueur à la liste
-      game.listPlayer.push(newPlayer);
-      // Enregistrez la mise à jour dans la base de données
-       game.save().then(() => {
-      
-        if(game){
-          io.to(game.code).emit("sendListPlayer", game.listPlayer);
-          // Ne renvoie la réponse que si tout s'est bien passé
-          res.json({ success: true });
-
-        }
-        
-      
-    })
-  })
-    .catch((error) => {
-      console.log("Erreur");
-      console.error('Error:', error);
-      // Gérez l'erreur sans renvoyer une réponse réussie ici
-      res.status(500).json({
-        error: error.message,
-      });
-    });
-};
-
-exports.removePlayer = (req, res, next) => {
-  
-  Game.findOneAndUpdate(
-    { code: req.params.code },
-    { $pull: { listPlayer: { userId: req.params.userId } } },
-    { new: true } // Pour renvoyer le document mis à jour
-  )
-    .then((game) => {
-      if (!game) {
-        // Si le jeu n'est pas trouvé, renvoyez une réponse appropriée
-        return res.status(404).json({
-          error: 'Game not found.',
-        });
-      }
-      // Émettez l'événement pour mettre à jour la liste des joueurs
-      io.to(game.code).emit('sendListPlayer', game.listPlayer);
-      // Renvoie la réponse uniquement si tout s'est bien passé
-      res.json({ success: true });
-    })
-    .catch((error) => {
-      console.error('Error:', error);
-      // Gérez l'erreur sans renvoyer une réponse réussie ici
-      res.status(500).json({
-        error: error.message,
-      });
-    });
-}; */
 
 
 const getMission =  async () => {
@@ -151,6 +73,25 @@ const getMission =  async () => {
  
   
 };
+
+exports.getNewMission = async (req, res, next) => {
+  const game = await Game.findOne({ code: req.params.code });
+  if (!game) {
+    return res.status(404).json({
+      error: 'Game not found.',
+    });
+  }
+  const player = game.listPlayer.find((player) => player.surname === req.params.username);
+  if (!player) {
+    return res.status(404).json({
+      error: 'Player not found.',
+    });
+  }
+  player.mission = await getMission();
+  await game.save();
+  return res.json({ success: true, mission: player.mission });
+}
+
   
 
 exports.startGame = async (req, res, next) => {
