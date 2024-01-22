@@ -50,6 +50,7 @@ const initializeSocket = (server) => {
               
             }
           }
+          io.to(socket.id).emit('sendTargetAndMission', existingPlayer.target, existingPlayer.mission);
           
 
         }
@@ -68,14 +69,15 @@ const initializeSocket = (server) => {
             else{
               game.listPlayer.push(newPlayer);
             }
+            game.save().then(() => {  
+            
+              io.to(data.code).emit("sendListPlayer", game.listPlayer.map(player => player.surname));
+              
+        })
          
 
         }
-        game.save().then(() => {  
-            
-            io.to(data.code).emit("sendListPlayer", game.listPlayer.map(player => player.surname));
-            
-      })
+        
     })
   });
 
