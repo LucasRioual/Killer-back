@@ -51,6 +51,7 @@ const initializeSocket = (server) => {
             }
           }
           io.to(socket.id).emit('sendTargetAndMission', existingPlayer.target, existingPlayer.mission);
+          game.save();
           
 
         }
@@ -129,7 +130,7 @@ const initializeSocket = (server) => {
   });
   
 
-  /* socket.on('leaveGame', (code, surname) => {
+  socket.on('leaveGame', (code, surname) => {
     console.log('leaveGame', code, surname);
     Game.findOne({
       code: code
@@ -146,8 +147,8 @@ const initializeSocket = (server) => {
         // Enregistrez les modifications dans la base de données
         game.save().then(() => {
           console.log(game.listPlayer)
-          // Émettre un événement pour informer les clients des mises à jour
-          io.to(code).emit("sendListPlayer", game.listPlayer);
+          io.to(murderPlayer.socketId).emit("sendTargetAndMission", murderPlayer.target, murderPlayer.mission);
+          //io.to(code).emit("sendListPlayer", game.listPlayer);
         });
       
     }) 
@@ -155,7 +156,7 @@ const initializeSocket = (server) => {
       console.error('Erreur lors du traitement de leaveGame:', error);
     });
   });
-  */
+ 
   
   
 
@@ -211,13 +212,17 @@ const initializeSocket = (server) => {
         ).then((game) => {
           const listPlayer = game.listPlayer;
           const target = listPlayer.find((player) => player.socketId === socket.id);
+          console.log('target',target);
           const killer = listPlayer.find((player) => player.target === target.surname);
           killer.target = target.target;
           killer.mission = target.mission;
           target.statut = 'dead';
           game.save().then(() => {
             if(game){
-              socket.to(killer.socketId).emit("isKilledConfirm", killer.target, killer.mission);
+              
+                socket.to(killer.socketId).emit("isKilledConfirm", killer.target, killer.mission);
+              
+              
             }
         })
     });
