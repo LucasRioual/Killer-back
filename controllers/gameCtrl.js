@@ -30,6 +30,10 @@ exports.createGame = (req, res, next) => {
       code: generatedCode,
       statut: 'wait',
       hostSurname: req.body.surname,
+      setting: req.body.setting ,
+      tagMission: req.body.tagMission,
+
+
     });
     //game.listPlayer.push({userId:req.body.hostId, surname: req.body.surname});
     game.save().then(
@@ -64,14 +68,28 @@ exports.createGame = (req, res, next) => {
 
 
 
-const getMission =  async () => {
+const getMission = async (tags, listMissionId) => {
+  // Récupérer les missions correspondant aux tags
+  const matchingDocuments = await Mission.find({
+    tag: { $in: tags },
+    _id: { $nin: listMissionId }
+  });
   
-  const documents = await Mission.aggregate([{ $sample: { size: 1 } }]); 
-  const mission = documents[0]; 
-  console.log(mission.message);
-  return mission.message;
- 
+  const randomIndex = Math.floor(Math.random() * matchingDocuments.length);
+  const documents = matchingDocuments[randomIndex];
   
+  
+
+  console.log('Documents', documents);
+
+
+  if (documents) {
+    console.log(documents.message);
+    return documents;
+  } else {
+    console.log("Aucune nouvelle mission disponible.");
+    return null; // Ou toute autre valeur ou indication que vous préférez
+  }
 };
 
 exports.getNewMission = async (req, res, next) => {
@@ -87,7 +105,10 @@ exports.getNewMission = async (req, res, next) => {
       error: 'Player not found.',
     });
   }
-  player.mission = await getMission();
+  const mission = await getMission(game.tagMission, game.listMission);
+  player.mission = mission.message;
+  game.listMission.push(mission._id);
+  console.log(game.listMission);
   await game.save();
   return res.json({ success: true, mission: player.mission });
 }

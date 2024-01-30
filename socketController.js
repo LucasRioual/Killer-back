@@ -41,15 +41,15 @@ const initializeSocket = (server) => {
             
           }
           if (existingPlayer.surname === game.hostSurname) {
-            //Regarder si il y a des nouveaux joueurs
+            io.to(socket.id).emit("isHost");
             if(game.listNewPlayer.length > 0){
-              console.log('Il y a des nouveaux joueurs', game.listNewPlayer);
               for (let i = 0; i < game.listNewPlayer.length; i++) {
                 io.to(socket.id).emit('NewPlayer',game.listNewPlayer[i].surname);
               }
               
             }
           }
+          io.to(socket.id).emit('countdown', game.setting.time);
           io.to(socket.id).emit('sendTargetAndMission', existingPlayer.target, existingPlayer.mission);
           game.save();
           
@@ -95,8 +95,10 @@ const initializeSocket = (server) => {
         return;
       }
       console.log('confirmNewPlayer', newPlayer);
-  
-      newPlayer.mission = await getMission();
+      const mission = await getMission(game.tagMission, game.listMission);
+      newPlayer.mission = mission.message
+      game.listMission.push(mission._id);
+      console.log('mission', game.listMission);
       const randomIndex = Math.floor(Math.random() * game.listPlayer.length);
       newPlayer.target = game.listPlayer[randomIndex].target;
       game.listPlayer[randomIndex].target = newPlayer.surname;
@@ -105,7 +107,8 @@ const initializeSocket = (server) => {
       game.listNewPlayer = game.listNewPlayer.filter(player => player !== newPlayer);
       await game.save();
       io.to(game.listPlayer[randomIndex].socketId).emit("sendTargetAndMission", game.listPlayer[randomIndex].target, game.listPlayer[randomIndex].mission);
-      io.to(newPlayer.socketId).emit('startGame', newPlayer.target, newPlayer.mission);
+      io.to(newPlayer.socketId).emit('startGame', newPlayer.target, newPlayer.mission, game.setting.changeMission);
+      io.to(newPlayer.socketId).emit('countdown', game.setting.time);
     } catch (error) {
       console.error('Error in confirmNewPlayer:', error);
     }
@@ -144,11 +147,14 @@ const initializeSocket = (server) => {
         murderPlayer.mission = playerToLeave.mission;
         // Supprimer le joueur qui part de la liste des joueurs
         game.listPlayer = game.listPlayer.filter(player => player.surname !== surname);
-        // Enregistrez les modifications dans la base de données
+        socket.leave(code);
+        if(playerToLeave.surname === game.hostSurname){
+          game.hostSurname = murderPlayer.surname;
+          io.to(murderPlayer.socketId).emit("isHost");
+        }
         game.save().then(() => {
           console.log(game.listPlayer)
           io.to(murderPlayer.socketId).emit("sendTargetAndMission", murderPlayer.target, murderPlayer.mission);
-          //io.to(code).emit("sendListPlayer", game.listPlayer);
         });
       
     }) 
@@ -248,20 +254,34 @@ const initializeSocket = (server) => {
 
   socket.on('hostStartGame', async (code) => {
     console.log('startGame');
+    let countdown;
+    let listTag;
   try {
     const game = await Game.findOne({ code: code });
     game.statut = 'start';
+    listTag = game.tagMission;
     const listPlayer = game.listPlayer;
     await Promise.all(listPlayer.map(async (player, index) => {
       player.target = index < listPlayer.length - 1 ? listPlayer[index + 1].surname : listPlayer[0].surname;
-      player.mission = await getMission();
+       const mission = await getMission(listTag, game.listMission);
+       player.mission = mission.message;
+       game.listMission.push(mission._id);
+        console.log('mission', game.listMission);
     }));
+    console.log('gameSetting', game.setting);
+    countdown = game.setting.time;
     await game.save();
     console.log('Nouvelle liste', game.listPlayer);
     for (let i = 0; i < game.listPlayer.length; i++) {
-      io.to(game.listPlayer[i].socketId).emit('startGame', game.listPlayer[i].target, game.listPlayer[i].mission);
+      io.to(game.listPlayer[i].socketId).emit('startGame', game.listPlayer[i].target, game.listPlayer[i].mission, game.setting.changeMission);
     };
-    //io.to(game.code).emit('startGame', game.listPlayer);
+    io.to(code).emit('countdown', countdown);
+    setInterval(() => {
+      countdown = countdown - 60;
+      io.to(code).emit('countdown', countdown);
+      game.setting.time = countdown;
+      game.save();
+    }, 60000);
   } catch (error) {
     console.log('Erreur');
     console.error('Error:', error);
@@ -297,14 +317,28 @@ const sendPushNotification = async (pushToken, title, body) => {
     }
   };
 
-  const getMission =  async () => {
-  
-    const documents = await Mission.aggregate([{ $sample: { size: 1 } }]); 
-    const mission = documents[0]; 
-    console.log(mission.message);
-    return mission.message;
-   
+  const getMission = async (tags, listMissionId) => {
+    // Récupérer les missions correspondant aux tags
+    const matchingDocuments = await Mission.find({
+      tag: { $in: tags },
+      _id: { $nin: listMissionId }
+    });
     
+    const randomIndex = Math.floor(Math.random() * matchingDocuments.length);
+    const documents = matchingDocuments[randomIndex];
+    
+    
+  
+    console.log('Documents', documents);
+  
+  
+    if (documents) {
+      console.log(documents.message);
+      return documents;
+    } else {
+      console.log("Aucune nouvelle mission disponible.");
+      return null; // Ou toute autre valeur ou indication que vous préférez
+    }
   };
 
 module.exports = { initializeSocket };
