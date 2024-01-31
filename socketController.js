@@ -151,10 +151,14 @@ const initializeSocket = (server) => {
         if(playerToLeave.surname === game.hostSurname){
           game.hostSurname = murderPlayer.surname;
           io.to(murderPlayer.socketId).emit("isHost");
+          sendPushNotification(murderPlayer.expoToken, playerToLeave.surname + ' a quitté la partie', `Tu deviens organisateur de la partie`);
         }
         game.save().then(() => {
-          console.log(game.listPlayer)
-          io.to(murderPlayer.socketId).emit("sendTargetAndMission", murderPlayer.target, murderPlayer.mission);
+          if(murderPlayer.socketId !== socket.id){
+            io.to(murderPlayer.socketId).emit("leaveGame", murderPlayer.target, murderPlayer.mission);
+            sendPushNotification(murderPlayer.expoToken, playerToLeave.surname + ' a quitté la partie', `Tu reçois une nouvelle mission et une nouvelle mission`);
+          }
+          
         });
       
     }) 
