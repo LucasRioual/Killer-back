@@ -226,6 +226,10 @@ const initializeSocket = (server) => {
           const killer = listPlayer.find((player) => player.target === target.surname);
           killer.target = target.target;
           killer.mission = target.mission;
+          killer.kills = (killer.kills || 0) + 1; // increment kills
+          // Calculate aliveTime for the target
+          const now = new Date();
+          target.aliveTime = now - target.startTime;
           target.statut = 'dead';
           game.save().then(() => {
             if(game){
@@ -260,6 +264,12 @@ const initializeSocket = (server) => {
     console.log('startGame');
     let countdown;
     let listTag;
+    Game.findOne({ code: code }).then((game) => {
+      game.listPlayer.forEach((player) => {
+        player.startTime = new Date();
+      });
+      game.save();
+    });
   try {
     const game = await Game.findOne({ code: code });
     game.statut = 'start';
