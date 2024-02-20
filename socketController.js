@@ -226,7 +226,7 @@ const initializeSocket = (server) => {
           const killer = listPlayer.find((player) => player.target === target.surname);
           killer.target = target.target;
           killer.mission = target.mission;
-          killer.kills = (killer.kills || 0) + 1; // increment kills
+          killer.kills = killer.kills + 1; // increment kills
           // Calculate aliveTime for the target
           const now = new Date();
           target.aliveTime = now - target.startTime;
@@ -235,6 +235,7 @@ const initializeSocket = (server) => {
             if(game){
               
                 socket.to(killer.socketId).emit("isKilledConfirm", killer.target, killer.mission);
+                
               
               
             }
