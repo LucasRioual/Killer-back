@@ -4,7 +4,7 @@ const app = require('./app');
 const port = 3000;
 const server = http.createServer(app);
 
-const { initializeSocket } = require('./socketController');
+const { initializeSocket } = require('./controllers/socketController');
 
 
 

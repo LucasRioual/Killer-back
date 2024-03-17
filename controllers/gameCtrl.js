@@ -1,13 +1,28 @@
 
 const Game = require('../models/gameModel.js');
 const Mission = require('../models/missionModel.js');
-let io; // Assurez-vous que io est accessible dans tout le module
+const User = require('../models/userModel.js');
+const Notification = require('./notifications');
+const Timer = require('./timer');
+
+
+let io;
 
 exports.initializeIo = (socketIoInstance) => {
   io = socketIoInstance;
 };
 
-//Lorsqu'un joueur rejoins le salon
+
+const sendEndNotification = async (gameCode) => {
+  const users = await User.find({ gameCode: gameCode });
+  users.forEach(async user => {
+    const title = "Fin de la partie";
+    const body = "Le classement est disponible";
+    await Notification.sendPushNotification(user.expoToken, title, body);
+  }
+  );
+}
+
 
 
 const generateUniqueCode = () => {
@@ -21,54 +36,59 @@ const generateUniqueCode = () => {
 };
 
 
-exports.createGame = (req, res, next) => {
-  
+exports.createGame = async (req, res, next) => { // Création d'une partie et renvoi du code de la partie
+
+  try{
     const generatedCode = generateUniqueCode();
-    console.log("Création d'une partie");
     
     const game = new Game({
-      code: generatedCode,
+      gameCode: generatedCode,
+      hostId: req.params.userId,
+      numberMission: req.body.changeMission,
       statut: 'wait',
-      hostSurname: req.body.surname,
-      setting: req.body.setting ,
       tagMission: req.body.tagMission,
-
-
+      timer: req.body.timer,
     });
-    //game.listPlayer.push({userId:req.body.hostId, surname: req.body.surname});
-    game.save().then(
-      (savedGame) => {
-        res.json({ success: true, code: savedGame.code });
-        
-      }
-    ).catch(
-      (error) => {
-        res.status(400).json({
-          error: error
-        });
-      }
-    );
+    await game.save();
+    return res.json({ success: true, gameCode: game.gameCode });
+  }
+  catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({
+      error: error.message,
+    });
+  
+    
   };
+}
 
-  exports.getPlayers = (req, res, next) => {
-  Game.findOne({
-    code: req.params.code
-  }).then(
-    (game) => {
-      res.json({ success: true, listPlayer: game.listPlayer, statut: game.statut });
-    }
-  ).catch(
-    (error) => {
-      res.status(404).json({
-        error: 'La partie n\'existe pas.'
-      });
-    }
-  );
-};
+ 
+
+exports.getNewMission = async (req, res, next) => {
+  try{
+    const userId = req.params.userId;
+    const user = await User.findOne({_id: userId});
+    const game = await Game.findOne({ gameCode: user.gameCode });
+    const mission =  await getMission(game.listMission, game.tagMission);
+    user.mission = mission.message;
+    user.numberMission -= 1;
+    game.listMission.push(mission._id);
+    await user.save();
+    await game.save();
+    return res.json({ success: true, mission: user.mission });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+  
+}
 
 
 
-const getMission = async (tags, listMissionId) => {
+const getMission = async (listMissionId, tags) => {
   // Récupérer les missions correspondant aux tags
   const matchingDocuments = await Mission.find({
     tag: { $in: tags },
@@ -77,75 +97,143 @@ const getMission = async (tags, listMissionId) => {
   
   const randomIndex = Math.floor(Math.random() * matchingDocuments.length);
   const documents = matchingDocuments[randomIndex];
-  
-  
-
-  console.log('Documents', documents);
-
 
   if (documents) {
-    console.log(documents.message);
     return documents;
   } else {
     console.log("Aucune nouvelle mission disponible.");
-    return null; // Ou toute autre valeur ou indication que vous préférez
+    return null; 
   }
 };
 
-exports.getNewMission = async (req, res, next) => {
-  const game = await Game.findOne({ code: req.params.code });
-  if (!game) {
-    return res.status(404).json({
-      error: 'Game not found.',
-    });
+const getTarget = async (user, users) => {
+  const index = users.findIndex((u) => u.userName === user.userName);
+  if (index === users.length - 1) {
+    return users[0].userName;
   }
-  const player = game.listPlayer.find((player) => player.surname === req.params.username);
-  if (!player) {
-    return res.status(404).json({
-      error: 'Player not found.',
-    });
-  }
-  const mission = await getMission(game.tagMission, game.listMission);
-  player.mission = mission.message;
-  game.listMission.push(mission._id);
-  console.log(game.listMission);
-  await game.save();
-  return res.json({ success: true, mission: player.mission });
+  return users[index + 1].userName;
+
 }
 
+
+const startTimer = (game, initialTime) => {
+
+  Timer.timerId = setInterval( async () => {
+    const now = new Date();
+    const timer = initialTime - (now - game.startTime)/1000;
+    game.timer = timer;
+    if(timer < 0){ //fin du jeu avec le timer
+      game.statut = 'end';
+      const remainsPlayer = await User.find({gameCode: game.gameCode, statut:'alive' }).sort({kills : 1}); //Tous les joueurs restants en vie
+      remainsPlayer.forEach(async (user, index) => {
+        const statUser = {userName: user.userName, numberKill: user.kills.length, mission: "none", killerName: "none", time: now };
+        game.timeline.push(statUser);
+        if(index === remainsPlayer.length - 1){
+          user.statut = 'winner';
+        }
+        else{
+          user.statut = 'timeout';
+        }
+        await user.save();
+      });
+      clearInterval(Timer.timerId);
+      io.to(game.gameCode).emit('end_game');
+      sendEndNotification(game.gameCode);
+      //Envoyer à tout le monde que la partie est terminée
+    }
+    io.to(game.gameCode).emit('timer', timer);
+    game.save();
+  }, 60000);
+}
   
 
-exports.startGame = async (req, res, next) => {
-  console.log('startGame');
+exports.startGame = async (req, res, next) => {  //Attribution des cibles et des missions plus initialisation des paramètres de jeu
   try {
-    const game = await Game.findOne({ code: req.params.code });
-
-    if (!game) {
-      return res.status(404).json({
-        error: 'Game not found.',
-      });
-    }
-
+    const game = await Game.findOne({ gameCode: req.params.code });
+    const users = await User.find({ gameCode: req.params.code }); // Tous les joueurs de la partie
     game.statut = 'start';
+    game.startTime = new Date();
+    const tagMission = game.tagMission;
 
-    const listPlayer = game.listPlayer;
+    for (let user of users) {
+      user.statut = 'alive';
+      const target = await getTarget(user, users);
+      const mission = await getMission(game.listMission, tagMission);
+      game.listMission.push(mission._id);
+      user.target = target;
+      user.mission = mission.message;
+      user.numberMission = game.numberMission;
+      user.kills = [];
 
-    // Utilisez Promise.all pour paralléliser les appels à getMission
-    await Promise.all(listPlayer.map(async (player, index) => {
-      player.target = index < listPlayer.length - 1 ? listPlayer[index + 1].surname : listPlayer[0].surname;
-      player.mission = await getMission();
-    }));
-
+      await user.save();
+    }
+    
     await game.save();
-
-    console.log('Nouvelle liste', game.listPlayer);
-    io.to(game.code).emit('startGame', game.listPlayer);
+    io.to(game.gameCode).emit('start_game');
     res.json({ success: true });
+    const initialTime = game.timer;
+    startTimer(game, initialTime);
   } catch (error) {
-    console.log('Erreur');
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+}
+
+exports.sendKillAccept = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    const user = await User.findOne ({ _id: userId });
+      user.statut = 'dead';
+      const killer = await User.findOne({ gameCode: user.gameCode, target: user.userName });
+      killer.target = user.target;
+      killer.mission = user.mission;
+      killer.kills.push(user.userName);
+      const now = new Date();
+      const stat = {userName: user.userName, numberKill: user.kills.length, mission: user.mission, killerName: killer.userName, time: now };
+      const game = await Game.findOne({ gameCode: user.gameCode });
+      game.timeline.push(stat);
+      user.aliveTime = now - game.startTime;
+      user.target = null;
+      user.mission = null;
+      const numberPlayerAlive = await User.countDocuments({ gameCode: user.gameCode, statut: 'alive' });
+      if(numberPlayerAlive === 1){
+        const statKiller = {userName: killer.userName, numberKill: killer.kills.length, mission: "none", killerName: "none", time: now };
+        killer.statut = 'winner';
+        game.timeline.push(statKiller);
+        game.statut = 'end';
+        clearInterval(Timer.timerId);
+        await killer.save();
+        io.to(user.gameCode).emit('end_game');
+        sendEndNotification(user.gameCode);
+        
+      }
+      else{
+        io.to(killer.socketId).emit('response_target', true);
+      }
+      await user.save();
+      await killer.save();
+      await game.save();
+      return res.json({ success: true});
+    
+  }
+  catch (error) {
     console.error('Error:', error);
     res.status(500).json({
       error: error.message,
     });
   }
-};
+}
+
+exports.getTimeline = async (req, res, next) => {
+  try{
+    const gameCode = req.params.code;
+    const game = await Game.findOne({ gameCode: gameCode });
+    return res.json({ success: true, timeline: game.timeline });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+}

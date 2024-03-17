@@ -4,10 +4,12 @@ const router = express.Router();
 const gameCtrl = require('../controllers/gameCtrl');
 
 
-router.post('/', gameCtrl.createGame);
-router.get('/:code', gameCtrl.getPlayers);
-router.get('/:code/start', gameCtrl.startGame);
-router.get('/:code/:username', gameCtrl.getNewMission);
+router.post('/:userId', gameCtrl.createGame);
+router.get('/start/:code', gameCtrl.startGame);
+router.get('/mission/:userId', gameCtrl.getNewMission);
+router.get('/classement/:code', gameCtrl.getTimeline);
+router.post('/kill/:userId', gameCtrl.sendKillAccept);
+
 
 
 module.exports = router;
